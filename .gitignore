@@ -3,5 +3,7 @@ server/obj/
 server/wwwroot/
 client/dist/
 client/node_modules/
+publish/
+.publish-tmp/
 *.user
 .vs/

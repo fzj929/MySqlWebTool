@@ -3,6 +3,10 @@ using MySqlTool.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Use the Windows Service lifetime when launched by the Service Control Manager.
+// Normal console launches continue to work unchanged.
+builder.Host.UseWindowsService();
+
 builder.Services.AddScoped<IMySqlService, MySqlService>();
 
 // 本地开发工具：允许来自 Vite 开发服务器的跨域请求

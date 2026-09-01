@@ -68,11 +68,74 @@ npm run dev
 
 ### 生产模式（可选）
 
-```bash
-cd client && npm run build
-# 将 client/dist 内容复制到 server/wwwroot，然后启动后端即可由后端统一托管
-cd server && dotnet run
+在安装了 Node.js 和 .NET 8 SDK 的 Windows 发布机器上运行：
+
+```bat
+publish.bat
 ```
+
+脚本会构建前端与后端，并将可部署文件统一输出到 `publish/MySqlWebTool`。这是依赖框架的发布包，不包含 .NET 运行时；将整个目录复制到已安装 **ASP.NET Core 8 Runtime**（包含 .NET 8 Runtime）的目标主机即可。
+
+```bat
+:: Windows，端口默认为 5080
+start.bat
+start.bat 8080
+```
+
+```bash
+# Linux，端口默认为 5080
+chmod +x start.sh
+./start.sh 8080
+```
+
+也可以直接调用 PowerShell 脚本指定输出目录或目标运行时标识：
+
+```powershell
+./publish.ps1 -OutputDirectory "D:/release/MySqlWebTool"
+./publish.ps1 -RuntimeIdentifier "win-x64"
+```
+
+### 部署为系统服务
+
+发布目录中会同时包含 Windows Service 和 Linux systemd 管理脚本。安装服务前，请先把整个发布目录复制到最终位置；服务配置会记录该绝对路径，安装后不要再移动目录。
+
+#### Windows Service
+
+使用“以管理员身份运行”的命令提示符进入发布目录：
+
+```bat
+:: 安装、设置开机启动并立即启动（默认服务名 MySqlWebTool、端口 5080）
+install-service.bat
+
+:: 自定义服务名和端口
+install-service.bat -ServiceName MySqlWebTool -Port 8080
+
+start-service.bat
+stop-service.bat
+restart-service.bat
+uninstall-service.bat
+```
+
+管理自定义名称的服务时需要继续传入名称，例如 `restart-service.bat -ServiceName MySqlWebTool`。
+
+#### Linux systemd
+
+```bash
+chmod +x *.sh
+
+# 默认服务名 MySqlWebTool、端口 5080；默认以执行 sudo 的用户运行
+sudo ./install-service.sh
+
+# 自定义服务名、端口和运行用户
+sudo ./install-service.sh MySqlWebTool 8080 www-data
+
+sudo ./start-service.sh
+sudo ./stop-service.sh
+sudo ./restart-service.sh
+sudo ./uninstall-service.sh
+```
+
+自定义服务名后，管理脚本需要将服务名作为第一个参数，例如 `sudo ./restart-service.sh MySqlWebTool`。可通过 `systemctl status MySqlWebTool` 查看状态，通过 `journalctl -u MySqlWebTool -f` 查看日志。
 
 ## API
 
