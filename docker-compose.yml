@@ -1,0 +1,25 @@
+# 可选的本地测试数据库（需要 Docker Desktop 处于运行状态）
+# 启动： docker compose up -d
+# 停止： docker compose down
+# 数据： 初始化脚本 db/init.sql 会创建 demo 库与示例数据
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-web-tool-demo
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_ROOT_HOST: "%"
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:

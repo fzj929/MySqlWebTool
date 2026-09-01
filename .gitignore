@@ -1,0 +1,7 @@
+server/bin/
+server/obj/
+server/wwwroot/
+client/dist/
+client/node_modules/
+*.user
+.vs/
