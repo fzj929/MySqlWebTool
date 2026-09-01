@@ -1,5 +1,7 @@
 # MySQL Web 工具（Vue 3 + .NET 8）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 一个轻量、开箱即用的 MySQL 网页版管理工具：连接管理、数据库/表浏览、表结构查看、SQL 执行、分页数据浏览、CSV 导出。
 
 - 前端：Vue 3 + Vite + Element Plus
@@ -115,3 +117,7 @@ docker compose up -d
 ```
 
 将创建 `demo` 库以及 `customers`、`orders` 两张示例表（root / root123456）。
+
+## 开源协议
+
+本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改、分发与商用，无需授权，但请保留版权声明。
