@@ -15,8 +15,9 @@ def call(path,body):
         return response.read() if path.endswith("/export") else json.load(response)
 for info in json.loads(Path(args.connections).read_text(encoding="utf-8-sig")):
     kind=info["databaseType"]
-    assert kind in ("mysql","sqlserver","postgresql")
-    assert info.get("database"),"Choose an existing dedicated test database"
+    assert kind in ("mysql","sqlserver","postgresql","dm8")
+    assert info.get("schema") if kind=="dm8" else info.get("database"),"Choose an existing dedicated test database/schema"
+    info.setdefault("database", "")
     table="datapilot_test_"+uuid.uuid4().hex[:12]
     schema=info.get("schema") or ("dbo" if kind=="sqlserver" else "public")
     def q(name):
@@ -44,4 +45,3 @@ for info in json.loads(Path(args.connections).read_text(encoding="utf-8-sig")):
         print("PASS:",kind,"connection, catalogs, metadata, DDL, paging, decimal, CSV and writes")
     finally:
         if created: query("DROP TABLE "+qualified)
-

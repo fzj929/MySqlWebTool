@@ -3,6 +3,7 @@ export const engines = [
   { value: 'sqlserver', label: 'SQL Server', port: 1433, user: 'sa', database: 'master', color: '#b23b3b' },
   { value: 'postgresql', label: 'PostgreSQL', port: 5432, user: 'postgres', database: 'postgres', color: '#336791' },
   { value: 'sqlite', label: 'SQLite', port: 0, user: '', database: 'main', color: '#426d58' },
+  { value: 'dm8', label: '达梦 DM8', port: 5236, user: 'SYSDBA', database: '', color: '#a64832' },
 ]
 export function defaults(type = 'mysql') {
   const engine = engines.find(x => x.value === type) || engines[0]
@@ -20,9 +21,8 @@ export function selectSql(connection, database, schema, table, limit = 200, wher
   const type = connection.databaseType || 'mysql'
   const q = name => quote(type, name)
   const name = type === 'sqlite' ? q(table) : type === 'mysql' ? q(database) + '.' + q(table)
-    : q(schema || (type === 'sqlserver' ? 'dbo' : 'public')) + '.' + q(table)
+    : (schema || connection.schema ? q(schema || connection.schema) + '.' : type === 'dm8' ? '' : q(type === 'sqlserver' ? 'dbo' : 'public') + '.') + q(table)
   return 'SELECT ' + (type === 'sqlserver' ? 'TOP (' + limit + ') ' : '') + '* FROM ' + name +
     (where ? ' WHERE ' + where : '') + (orderBy ? ' ORDER BY ' + orderBy : '') +
     (type === 'sqlserver' ? '' : ' LIMIT ' + limit) + ';'
 }
-

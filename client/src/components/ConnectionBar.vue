@@ -21,7 +21,7 @@ function connectionLabel(item) {
   const type = engines.find(e => e.value === item.databaseType)?.label || 'MySQL'
   const target = item.databaseType === 'sqlite'
     ? (item.fileName || item.fileId?.slice(0,8))
-    : item.user + '@' + item.host + ':' + item.port + (item.database ? ' / ' + item.database : '')
+    : item.user + '@' + item.host + ':' + item.port + (item.databaseType === 'dm8' ? (item.schema ? ' / ' + item.schema : '') : (item.database ? ' / ' + item.database : ''))
   return type + ' · ' + target
 }
 async function refreshFiles() {
@@ -95,7 +95,8 @@ async function forget() {
         <el-form-item label="端口"><el-input-number v-model="connection.port" :min="1" :max="65535" controls-position="right" style="width:100px" @change="disconnect" /></el-form-item>
         <el-form-item label="用户"><el-input v-model="connection.user" style="width:110px" @change="disconnect" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="connection.password" type="password" show-password style="width:140px" @change="disconnect" /></el-form-item>
-        <el-form-item label="数据库"><el-input v-model="connection.database" style="width:135px" placeholder="默认数据库" @change="disconnect" /></el-form-item>
+        <el-form-item v-if="connection.databaseType === 'dm8'" label="模式"><el-input v-model="connection.schema" style="width:135px" placeholder="留空使用默认模式" title="按服务器实际大小写填写模式名，不需要加双引号" @change="disconnect" /></el-form-item>
+        <el-form-item v-else label="数据库"><el-input v-model="connection.database" style="width:135px" placeholder="默认数据库" @change="disconnect" /></el-form-item>
         <el-form-item v-if="connection.databaseType === 'mysql'" label="SSL"><el-switch v-model="connection.useSsl" @change="disconnect" /></el-form-item>
         <template v-if="connection.databaseType === 'sqlserver'">
           <el-form-item label="加密"><el-switch v-model="connection.encrypt" @change="disconnect" /></el-form-item>

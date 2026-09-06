@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix="datapilot-browser-") as temp:
         page.goto(args.base)
         page.wait_for_load_state("networkidle")
         expect(page).to_have_title("DataPilot 数据库工作台")
-        for label,port in [("SQL Server","1433"),("PostgreSQL","5432"),("MySQL","3306")]:
+        for label,port in [("SQL Server","1433"),("PostgreSQL","5432"),("达梦 DM8","5236"),("MySQL","3306")]:
             page.get_by_role("button",name=label,exact=True).click()
             expect(page.locator(".conn-form .el-input-number input")).to_have_value(port)
         page.get_by_role("button",name="SQLite",exact=True).click()

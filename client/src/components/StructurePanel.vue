@@ -181,7 +181,7 @@ function keyTag(key) {
           </template>
 
           <el-alert v-for="warning in schema?.warnings || []" :key="warning" :title="warning" type="info" :closable="false" />
-          <p v-if="!isMySql" class="hint">{{ schema?.ddlSource === 'native' ? '数据库定义' : '根据系统目录生成' }}</p>
+          <p v-if="!isMySql" class="hint">{{ schema?.ddlSource === 'native' ? '数据库定义' : schema?.ddlSource === 'unavailable' ? '对象定义不可用' : '根据系统目录生成' }}</p>
           <div v-if="isMySql && ddlMode === 'generated'" class="ddl-options">
             <el-checkbox v-model="ddlOptions.ifNotExists">IF NOT EXISTS</el-checkbox>
             <el-checkbox v-model="ddlOptions.dropIfExists">前置 DROP TABLE</el-checkbox>

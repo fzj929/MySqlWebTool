@@ -67,7 +67,7 @@ async function loadNode(node, resolve) {
 
   loading.value = true
   try {
-    if (data.type === 'db' && ['sqlserver','postgresql'].includes(props.connection.databaseType)) {
+    if (data.type === 'db' && ['sqlserver','postgresql','dm8'].includes(props.connection.databaseType)) {
       const res = await api.schemas(props.connection, data.name)
       const children = res.items.map(s => ({ key: JSON.stringify(['schema',data.name,s.name]), name: s.name, type: 'schema', database: data.name, leaf: false }))
       cache.value[data.key] = children; resolve(children); return

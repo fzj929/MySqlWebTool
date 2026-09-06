@@ -10,6 +10,7 @@ DataPilot（原 MySQL Web 工具）是 Vue 3 + ASP.NET Core 8 构建的轻量数
 | SQL Server | TCP 主机、端口、SQL 账号密码、加密及证书选项 | 数据库 → Schema → 表/视图 | 系统目录重建表、键、约束和常用索引；视图读取定义 |
 | PostgreSQL | 主机、端口、账号密码、数据库、SSL Mode | 数据库 → Schema → 表/视图 | 系统目录重建，保留类型、表达式、约束及索引定义 |
 | SQLite 3 | 上传 .db / .sqlite / .sqlite3 文件 | main → 表/视图 | sqlite_schema 中的表、索引、视图及触发器定义 |
+| 达梦 DM8 | 主机、端口（默认 5236）、账号密码、可选模式 | 当前实例 → Schema → 表/视图 | DBMS_METADATA.GET_DDL 原生对象定义 |
 
 推荐 SQL Server 2012+、PostgreSQL 12+；具体服务器版本需要在部署环境验证。SQL Server 使用 SQL 身份认证，暂不支持 Windows 集成登录。SQLite 支持标准未加密数据库。
 
@@ -22,6 +23,18 @@ DataPilot（原 MySQL Web 工具）是 Vue 3 + ASP.NET Core 8 构建的轻量数
 - 取消“记住连接”仅表示本次不新增或更新记录；已有记录可通过“删除连接”移除。测试连接或连接失败不会保存。连接列表显示数据库类型、账号、主机、端口及数据库，最多保留最近 20 条。
 - 数据库列表和结构受登录用户的数据库权限限制。
 - SQL Server/PostgreSQL DDL 用于常见对象重建，界面注明来源和限制；分区、权限、触发器、序列依赖等完整迁移应使用数据库原生备份工具。DDL 不包含表数据。
+
+## 达梦 DM8
+
+选择“达梦 DM8”，填写主机、端口、用户和密码。模式可留空使用账号默认模式；指定时按服务器实际大小写填写，不加双引号。对象树列出有可见表/视图的模式以及当前模式。通过模式节点切换后，后续查询使用所选模式；每次请求独立连接，不跨请求保留事务或 SET SCHEMA 状态。
+
+使用 NuGet `DM.DmProvider 8.3.1.47463` 的 net8.0 驱动，随 `dotnet publish` 自动打包。普通连接无需手工注册 GAC。特殊 SSL/第三方加密配置不在本版界面范围内。驱动来源：[NuGet](https://www.nuget.org/packages/DM.DmProvider/8.3.1.47463)，参考：[达梦 .NET 编程指南](https://eco.dameng.com/document/dm/zh-cn/pm/net-rogramming-guide.html)。
+
+支持字段、索引、主键、数据分页、SQL 执行及 CSV 导出；GET_DDL 不可用时显示提示，不阻止数据浏览。原生 DDL 不等于完整备份，独立索引、触发器、权限及数据迁移请使用达梦原生工具。建议使用具有所需权限的专用账号，不要日常使用 SYSDBA 管理员账号。
+
+已在 Windows 应用主机连接 DM8 8.1.4.6 完成只读联调：连接、模式与表列表、字段/索引/主键、GET_DDL、分页 SQL、CSV 表头、BIGINT、38 位 DECIMAL、中文 CLOB 和 NULL。未执行写入或 Linux 实机测试，其他目标版本/系统仍需验收。`tests/smoke_dm8_readonly.py` 从进程环境 DM8_TEST_HOST、DM8_TEST_PORT、DM8_TEST_USER、DM8_TEST_PASSWORD 读取凭据，不保存到文件；分页与导出使用空条件，不读取业务行。
+
+如需写入回归，可在忽略提交的 `tests/connections.local.json` 中配置 `databaseType: "dm8"`、host、port、user、password、schema，然后运行 `tests/smoke_remote.py --connections tests/connections.local.json`。该测试会在指定测试模式内创建随机名称的表和索引、写入测试数据，结束后删除测试表；勿指向生产模式。
 
 ## SQLite 文件管理
 

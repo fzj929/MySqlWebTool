@@ -7,6 +7,8 @@ publish/
 .publish-tmp/
 DataPilot-data/
 tests/.artifacts/
+tests/**/bin/
+tests/**/obj/
 tests/connections.local.json
 *.user
 .vs/

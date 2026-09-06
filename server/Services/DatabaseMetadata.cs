@@ -13,6 +13,7 @@ public sealed partial class DatabaseService
     private async Task<TableSchemaResult> SchemaOnConnection(ConnectionInfo info, DbConnection c, string database, string schema, string table, CancellationToken ct)
     {
         if (info.DatabaseType == "mysql") return await mysql.GetTableSchemaAsync(info, database, table, ct);
+        if (info.DatabaseType == "dm8") return await DmSchema(c, Schema(info, schema), table, ct);
         return info.DatabaseType == "sqlite" ? await SqliteSchema(c, table, ct) :
             info.DatabaseType == "postgresql" ? await PostgresSchema(c, Schema(info,schema), table, ct) :
             await SqlServerSchema(c, Schema(info,schema), table, ct);
@@ -240,4 +241,3 @@ public sealed partial class DatabaseService
         return result;
     }
 }
-

@@ -23,7 +23,7 @@ public sealed class ConnectionInfo
 
     public void Validate()
     {
-        if (DatabaseType is not ("mysql" or "sqlserver" or "postgresql" or "sqlite"))
+        if (DatabaseType is not ("mysql" or "sqlserver" or "postgresql" or "sqlite" or "dm8"))
             throw new ArgumentException("不支持的数据库类型");
         if (DatabaseType == "sqlite")
         {

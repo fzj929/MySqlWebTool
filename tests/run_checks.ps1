@@ -2,13 +2,14 @@
 param(
     [string]$Python = "python",
     [string]$BrowserScript = "tests/smoke_browser.py",
-    [int]$Port = 5099
+    [int]$Port = 5099,
+    [string]$ReleaseDirectory = "publish/DataPilot"
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $artifacts = Join-Path $PSScriptRoot ".artifacts"
 New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
-$published = Join-Path $repo "publish/DataPilot"
+$published = Join-Path $repo $ReleaseDirectory
 if (-not (Test-Path (Join-Path $published "DataPilot.Api.dll"))) { throw "Run publish.bat first." }
 $previousDirectory = $env:DataPilot__SqliteDirectory
 $previousPythonPath = $env:PYTHONPATH

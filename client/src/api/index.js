@@ -73,7 +73,7 @@ export function loadSavedConnections() {
 
 export function persistConnection(item, rememberPassword) {
   const list = loadSavedConnections()
-  const id = JSON.stringify([item.databaseType || 'mysql', item.host, item.port, item.user, item.database, item.fileId || ''])
+  const id = JSON.stringify([item.databaseType || 'mysql', item.host, item.port, item.user, item.databaseType === 'dm8' ? item.schema || '' : item.database, item.fileId || ''])
   const existing = list.findIndex(x => x.id === id)
 
   const record = {
