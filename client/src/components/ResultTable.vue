@@ -6,7 +6,7 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   columnTypes: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
-  maxHeight: { type: String, default: '100%' },
+  height: { type: [String, Number], default: '100%' },
 })
 
 const typeMap = computed(() => {
@@ -36,7 +36,7 @@ function columnLabel(col) {
     border
     stripe
     size="small"
-    :max-height="maxHeight"
+    :height="height"
     highlight-current-row
   >
     <el-table-column

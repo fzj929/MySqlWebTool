@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { notifyError, notifyInfo, notifySuccess, notifyWarning } from '../utils/notify'
 import { api, exportCsv } from '../api'
 import ResultTable from './ResultTable.vue'
@@ -14,6 +14,8 @@ const limit = ref(1000)
 const loading = ref(false)
 const result = ref(null)
 const exporting = ref(false)
+let requestGeneration = 0
+watch(() => JSON.stringify(props.connection), clearResult)
 
 async function execute() {
   const text = sql.value.trim()
@@ -27,11 +29,12 @@ async function execute() {
   }
 
   loading.value = true
+  const generation = ++requestGeneration
   try {
-    result.value = await api.query(props.connection, text, limit.value)
+    const response = await api.query(props.connection, text, limit.value)
+    if (generation === requestGeneration) result.value = response
   } catch (e) {
-    result.value = null
-    notifyError(e.message)
+    if (generation === requestGeneration) { result.value = null; notifyError(e.message) }
   } finally {
     loading.value = false
   }
@@ -78,6 +81,7 @@ function setSql(text) {
 
 /** 断开连接时清空上一次的查询结果 */
 function clearResult() {
+  requestGeneration++
   result.value = null
 }
 
@@ -121,7 +125,7 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
         v-model="sql"
         class="sql-editor mono"
         spellcheck="false"
-        placeholder="在此输入 SQL，例如：SELECT * FROM `mysql`.`user` LIMIT 100;"
+        placeholder="输入当前数据库支持的 SQL，或从表结构面板发送 DDL。批次显示第一个结果集。"
         @keydown.ctrl.enter.prevent="execute"
         @keydown.tab="onTabKey"
       />
@@ -142,7 +146,7 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
         :rows="result.rows"
         :column-types="result.columnTypes"
         :loading="loading"
-        max-height="100%"
+        height="100%"
       />
       <div v-else-if="!result" class="placeholder hint">
         执行查询后，结果将显示在这里

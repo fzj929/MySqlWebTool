@@ -17,11 +17,21 @@ http.interceptors.response.use(
 export const api = {
   testConnection: (connection) => http.post('/connection/test', connection),
   databases: (connection) => http.post('/schema/databases', connection),
-  tables: (connection, database) => http.post('/schema/tables', { connection, database }),
-  tableSchema: (connection, database, table) =>
-    http.post('/schema/table', { connection, database, table }),
+  schemas: (connection, database) => http.post('/schema/schemas', { connection, database }),
+  tables: (connection, database, schema = '') => http.post('/schema/tables', { connection, database, schema }),
+  tableSchema: (connection, database, table, schema = '') =>
+    http.post('/schema/table', { connection, database, schema, table }),
   query: (connection, sql, limit) => http.post('/query', { connection, sql, limit }),
   tableData: (connection, payload) => http.post('/query/data', { connection, ...payload }),
+  sqliteFiles: () => http.get('/sqlite/files'),
+  uploadSqlite: file => { const form = new FormData(); form.append('file', file); return http.post('/sqlite/files', form) },
+  deleteSqlite: id => http.delete('/sqlite/files/' + encodeURIComponent(id)),
+  downloadSqlite: async id => {
+    const response = await axios.get('/api/sqlite/files/' + encodeURIComponent(id) + '/download', { responseType: 'blob' })
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a'); link.href = url; link.download = 'DataPilot-' + id.slice(0,8) + '.db'
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+  },
 }
 
 /** 导出查询结果（或整表数据）为 CSV 并触发下载 */
@@ -49,13 +59,13 @@ export async function exportCsv(connection, sql, limit) {
 
 // ------------------------------------------------------------ 本地连接记录
 
-const STORAGE_KEY = 'mysql-web-tool:connections'
+const STORAGE_KEY = 'datapilot:connections'
 
 export function loadSavedConnections() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem('mysql-web-tool:connections')
     const list = raw ? JSON.parse(raw) : []
-    return Array.isArray(list) ? list : []
+    return Array.isArray(list) ? list.map(x => ({ ...x, databaseType: x.databaseType || 'mysql' })) : []
   } catch {
     return []
   }
@@ -63,12 +73,12 @@ export function loadSavedConnections() {
 
 export function persistConnection(item, rememberPassword) {
   const list = loadSavedConnections()
-  const existing = list.findIndex(
-    (x) => x.host === item.host && x.port === item.port && x.user === item.user,
-  )
+  const id = JSON.stringify([item.databaseType || 'mysql', item.host, item.port, item.user, item.database, item.fileId || ''])
+  const existing = list.findIndex(x => x.id === id)
 
   const record = {
-    id: `${item.host}:${item.port}:${item.user}`,
+    ...item,
+    id,
     host: item.host,
     port: item.port,
     user: item.user,
@@ -77,11 +87,11 @@ export function persistConnection(item, rememberPassword) {
     password: rememberPassword ? item.password || '' : '',
   }
 
-  if (existing >= 0) list.splice(existing, 1, record)
-  else list.unshift(record)
+  if (existing >= 0) list.splice(existing, 1)
+  list.unshift(record)
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 20)))
-  return list
+  return list.slice(0, 20)
 }
 
 export function forgetConnection(id) {

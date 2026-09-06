@@ -5,7 +5,7 @@ param(
     [string]$Action,
 
     [ValidatePattern("^[A-Za-z0-9_.-]+$")]
-    [string]$ServiceName = "MySqlWebTool",
+    [string]$ServiceName = "DataPilot",
 
     [ValidateRange(1, 65535)]
     [int]$Port = 5080
@@ -29,7 +29,7 @@ switch ($Action) {
         }
 
         $appDirectory = [System.IO.Path]::GetFullPath($PSScriptRoot)
-        $appDll = Join-Path $appDirectory "MySqlTool.Api.dll"
+        $appDll = Join-Path $appDirectory "DataPilot.Api.dll"
         if (-not (Test-Path -LiteralPath $appDll -PathType Leaf)) {
             throw "Application file was not found: $appDll"
         }
@@ -43,8 +43,8 @@ switch ($Action) {
             '" --urls "http://0.0.0.0:' + $Port + '"'
         New-Service `
             -Name $ServiceName `
-            -DisplayName "$ServiceName (MySQL Web Tool)" `
-            -Description "MySQL Web Tool ASP.NET Core service" `
+            -DisplayName "$ServiceName (DataPilot)" `
+            -Description "DataPilot ASP.NET Core service" `
             -BinaryPathName $binaryPath `
             -StartupType Automatic | Out-Null
 

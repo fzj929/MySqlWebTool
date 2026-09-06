@@ -3,10 +3,12 @@ import { ref, watch } from 'vue'
 import { notifyError, notifySuccess, notifyWarning } from '../utils/notify'
 import { api, exportCsv } from '../api'
 import ResultTable from './ResultTable.vue'
+import { selectSql } from '../utils/database'
 
 const props = defineProps({
   connection: { type: Object, required: true },
   database: { type: String, default: '' },
+  objectSchema: { type: String, default: '' },
   table: { type: String, default: '' },
   connected: { type: Boolean, default: false },
 })
@@ -24,11 +26,12 @@ const exporting = ref(false)
 const elapsed = ref(0)
 
 async function load() {
-  if (!props.database || !props.table) return
+  if (!props.connected || !props.database || !props.table) { rows.value = []; columns.value = []; total.value = 0; return }
   loading.value = true
   try {
     const res = await api.tableData(props.connection, {
       database: props.database,
+      schema: props.objectSchema,
       table: props.table,
       page: page.value,
       pageSize: pageSize.value,
@@ -55,7 +58,7 @@ async function load() {
 }
 
 watch(
-  () => [props.database, props.table],
+  () => [props.database, props.objectSchema, props.table, props.connected],
   () => {
     page.value = 1
     where.value = ''
@@ -85,10 +88,7 @@ async function onExport() {
 }
 
 function buildSql(limit) {
-  const qualified = `\`${props.database}\`.\`${props.table}\``
-  const w = where.value.trim() ? ` WHERE ${where.value.trim()}` : ''
-  const o = orderBy.value.trim() ? ` ORDER BY ${orderBy.value.trim()}` : ''
-  return `SELECT * FROM ${qualified}${w}${o} LIMIT ${limit}`
+  return selectSql(props.connection, props.database, props.objectSchema, props.table, limit, where.value.trim(), orderBy.value.trim())
 }
 </script>
 
@@ -136,7 +136,7 @@ function buildSql(limit) {
           :rows="rows"
           :column-types="columnTypes"
           :loading="loading"
-          max-height="100%"
+          height="100%"
         />
       </div>
 
@@ -169,6 +169,8 @@ function buildSql(limit) {
 }
 
 .table-wrap {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: 8px 12px 0;
@@ -176,6 +178,7 @@ function buildSql(limit) {
 }
 
 .pager {
+  flex-shrink: 0;
   padding: 8px 12px;
   display: flex;
   justify-content: flex-end;

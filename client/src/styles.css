@@ -1,10 +1,11 @@
 :root {
-  --app-bg: #f5f7fa;
+  --app-bg: #f1f4f2;
   --panel-bg: #ffffff;
-  --border: #e4e7ed;
+  --border: #dce5df;
   --text: #303133;
   --text-weak: #909399;
-  --brand: #2f6feb;
+  --brand: #216455;
+  --el-color-primary: #216455;
 }
 
 * {

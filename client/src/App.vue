@@ -7,8 +7,10 @@ import ObjectTree from './components/ObjectTree.vue'
 import QueryPanel from './components/QueryPanel.vue'
 import TableDataPanel from './components/TableDataPanel.vue'
 import StructurePanel from './components/StructurePanel.vue'
+import { defaults, selectSql } from './utils/database'
 
 const connection = reactive({
+  ...defaults(),
   host: '127.0.0.1',
   port: 3306,
   user: 'root',
@@ -24,11 +26,13 @@ const selected = ref({ database: '', table: '' })
 const reloadKey = ref(0)
 const queryPanel = ref()
 const asideWidth = ref(268)
+let connectionGeneration = 0
 
 // 启动时回填最近一次连接（不含密码时仅回填地址与账号）
 const saved = loadSavedConnections()
 if (saved.length) {
   const last = saved[0]
+  Object.assign(connection, defaults(last.databaseType), last)
   connection.host = last.host
   connection.port = last.port
   connection.user = last.user
@@ -37,12 +41,14 @@ if (saved.length) {
   connection.useSsl = !!last.useSsl
 }
 
-async function loadDatabases() {
+async function loadDatabases(generation) {
   try {
     const res = await api.databases(connection)
+    if (generation !== connectionGeneration) return false
     databases.value = res.items
     return true
   } catch (e) {
+    if (generation !== connectionGeneration) return false
     notifyError(e.message, '获取数据库列表失败')
     databases.value = []
     return false
@@ -52,7 +58,9 @@ async function loadDatabases() {
 // 先取到库列表，再让对象树进入已连接状态：
 // 否则懒加载树挂载时根节点还是空数组，要第二次点连接才会显示
 async function onConnected() {
-  const ok = await loadDatabases()
+  const generation = ++connectionGeneration
+  const ok = await loadDatabases(generation)
+  if (generation !== connectionGeneration) return
   connected.value = ok
   reloadKey.value += 1
   if (ok) notifySuccess(`共 ${databases.value.length} 个数据库`, '已连接')
@@ -60,6 +68,7 @@ async function onConnected() {
 
 // 断开：清空库列表、选中对象与查询结果，对象树回到未连接状态
 function handleDisconnected() {
+  connectionGeneration++
   connected.value = false
   databases.value = []
   selected.value = { database: '', table: '' }
@@ -74,13 +83,23 @@ function handleSendToEditor(text) {
 }
 
 function onSelectDatabase(name) {
+  connection.database = name
+  connection.schema = ''
   selected.value = { database: name, table: '' }
 }
 
-function onSelectTable({ database, table }) {
-  selected.value = { database, table }
+function onSelectSchema({ database, schema }) {
+  connection.database = database
+  connection.schema = schema
+  selected.value = { database, schema, table: '' }
+}
+
+function onSelectTable({ database, schema, table }) {
+  connection.database = database
+  connection.schema = schema || ''
+  selected.value = { database, schema, table }
   activeTab.value = 'data'
-  queryPanel.value?.setSqlIfEmpty(`SELECT * FROM \`${database}\`.\`${table}\` LIMIT 200;`)
+  queryPanel.value?.setSqlIfEmpty(selectSql(connection, database, schema, table))
 }
 </script>
 
@@ -102,6 +121,7 @@ function onSelectTable({ database, table }) {
           :connected="connected"
           :reload-key="reloadKey"
           @select-database="onSelectDatabase"
+          @select-schema="onSelectSchema"
           @select-table="onSelectTable"
         />
       </aside>
@@ -120,8 +140,10 @@ function onSelectTable({ database, table }) {
               <span><el-icon><Grid /></el-icon> 数据浏览</span>
             </template>
             <TableDataPanel
+              :key="JSON.stringify([reloadKey, selected.database, selected.schema, selected.table])"
               :connection="connection"
               :database="selected.database"
+              :object-schema="selected.schema || ''"
               :table="selected.table"
               :connected="connected"
             />
@@ -132,8 +154,10 @@ function onSelectTable({ database, table }) {
               <span><el-icon><Tickets /></el-icon> 表结构</span>
             </template>
             <StructurePanel
+              :key="JSON.stringify([reloadKey, selected.database, selected.schema, selected.table])"
               :connection="connection"
               :database="selected.database"
+              :object-schema="selected.schema || ''"
               :table="selected.table"
               :connected="connected"
               @send-to-editor="handleSendToEditor"
@@ -143,11 +167,11 @@ function onSelectTable({ database, table }) {
 
         <footer class="status-bar">
           <span v-if="selected.database">
-            当前对象：<b class="mono">{{ selected.database }}{{ selected.table ? '.' + selected.table : '' }}</b>
+            当前对象：<b class="mono">{{ selected.database }}{{ selected.schema ? '.' + selected.schema : '' }}{{ selected.table ? '.' + selected.table : '' }}</b>
           </span>
           <span v-else class="hint">未选择对象</span>
           <div class="spacer" />
-          <span class="hint">后端 API：http://localhost:5080 · 数据行数上限由服务端配置控制</span>
+          <span class="hint">DataPilot · {{ connection.databaseType }} · {{ connection.database || '未选择数据库' }}{{ connection.schema ? ' / ' + connection.schema : '' }}</span>
         </footer>
       </main>
     </div>

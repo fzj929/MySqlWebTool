@@ -10,7 +10,7 @@ const props = defineProps({
   reloadKey: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['select-database', 'select-table'])
+const emit = defineEmits(['select-database', 'select-schema', 'select-table'])
 
 const treeRef = ref()
 const filterText = ref('')
@@ -55,30 +55,38 @@ async function loadNode(node, resolve) {
   }
 
   const data = node.data
-  if (data?.type !== 'db') {
+  if (!['db', 'schema'].includes(data?.type)) {
     resolve([])
     return
   }
 
-  if (cache.value[data.name]) {
-    resolve(cache.value[data.name])
+  if (cache.value[data.key]) {
+    resolve(cache.value[data.key])
     return
   }
 
   loading.value = true
   try {
-    const res = await api.tables(props.connection, data.name)
+    if (data.type === 'db' && ['sqlserver','postgresql'].includes(props.connection.databaseType)) {
+      const res = await api.schemas(props.connection, data.name)
+      const children = res.items.map(s => ({ key: JSON.stringify(['schema',data.name,s.name]), name: s.name, type: 'schema', database: data.name, leaf: false }))
+      cache.value[data.key] = children; resolve(children); return
+    }
+    const database = data.type === 'db' ? data.name : data.database
+    const schema = data.type === 'schema' ? data.name : ''
+    const res = await api.tables(props.connection, database, schema)
     const children = res.items.map((t) => ({
-      key: `tb:${data.name}:${t.name}`,
+      key: JSON.stringify(['table', database, schema, t.name]),
       name: t.name,
       type: 'table',
       leaf: true,
-      database: data.name,
+      database,
+      schema,
       tableType: t.type,
       rows: t.rows,
       sizeMb: t.sizeMb,
     }))
-    cache.value[data.name] = children
+    cache.value[data.key] = children
     resolve(children)
   } catch (e) {
     notifyError(e.message, '加载表失败')
@@ -91,8 +99,10 @@ async function loadNode(node, resolve) {
 function onNodeClick(data) {
   if (data.type === 'db') {
     emit('select-database', data.name)
+  } else if (data.type === 'schema') {
+    emit('select-schema', { database: data.database, schema: data.name })
   } else if (data.type === 'table') {
-    emit('select-table', { database: data.database, table: data.name })
+    emit('select-table', { database: data.database, schema: data.schema, table: data.name })
   }
 }
 </script>

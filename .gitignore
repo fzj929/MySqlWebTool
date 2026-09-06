@@ -5,5 +5,8 @@ client/dist/
 client/node_modules/
 publish/
 .publish-tmp/
+DataPilot-data/
+tests/.artifacts/
+tests/connections.local.json
 *.user
 .vs/

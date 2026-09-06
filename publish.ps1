@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$OutputDirectory = "publish/MySqlWebTool",
+    [string]$OutputDirectory = "publish/DataPilot",
     [string]$RuntimeIdentifier = ""
 )
 
@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 
 $projectRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $clientRoot = Join-Path $projectRoot "client"
-$serverProject = Join-Path $projectRoot "server/MySqlTool.Api.csproj"
+$serverProject = Join-Path $projectRoot "server/DataPilot.Api.csproj"
 $allowedLocalOutputRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "publish"))
 $outputRoot = if ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
     [System.IO.Path]::GetFullPath($OutputDirectory)
@@ -29,6 +29,14 @@ $isAllowedLocalOutput = $outputRoot.TrimEnd('\', '/') -eq $allowedLocalOutputRoo
     $outputRoot.StartsWith($allowedPrefix, $pathComparison)
 if ($isInsideProject -and -not $isAllowedLocalOutput) {
     throw "A publish directory inside the project must be under: $allowedLocalOutputRoot"
+}
+if (Test-Path -LiteralPath $outputRoot) {
+    if (-not (Test-Path -LiteralPath (Join-Path $outputRoot ".datapilot-release"))) {
+        throw "The output directory already exists and is not a DataPilot release. Choose a new empty path."
+    }
+    if ((Get-Item -LiteralPath $outputRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "The output directory cannot be a symbolic link."
+    }
 }
 
 function Invoke-CheckedCommand {
@@ -90,9 +98,16 @@ try {
     New-Item -ItemType Directory -Path $webRoot -Force | Out-Null
     Copy-Item -Path (Join-Path $clientRoot "dist/*") -Destination $webRoot -Recurse -Force
     Copy-Item -Path (Join-Path $projectRoot "publish-assets/*") -Destination $stagingRoot -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $stagingRoot
+    [IO.File]::WriteAllText((Join-Path $stagingRoot ".datapilot-release"), "DataPilot", [Text.UTF8Encoding]::new($false))
+    foreach ($script in Get-ChildItem -LiteralPath $stagingRoot -Filter "*.sh") {
+        [IO.File]::WriteAllText($script.FullName, ([IO.File]::ReadAllText($script.FullName)).Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false))
+    }
 
     if (Test-Path -LiteralPath $outputRoot) {
-        Remove-Item -LiteralPath $outputRoot -Recurse -Force
+        $backupPath = $outputRoot + ".previous-" + [Guid]::NewGuid().ToString("N")
+        Move-Item -LiteralPath $outputRoot -Destination $backupPath
+        Write-Host "Previous release preserved: $backupPath"
     }
     $outputParent = Split-Path -Parent $outputRoot
     New-Item -ItemType Directory -Path $outputParent -Force | Out-Null

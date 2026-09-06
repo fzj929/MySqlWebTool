@@ -7,6 +7,7 @@ import { defaultDdlOptions, generateCreateTable } from '../utils/ddlGenerator'
 const props = defineProps({
   connection: { type: Object, required: true },
   database: { type: String, default: '' },
+  objectSchema: { type: String, default: '' },
   table: { type: String, default: '' },
   connected: { type: Boolean, default: false },
 })
@@ -17,7 +18,8 @@ const loading = ref(false)
 const schema = ref(null)
 
 // DDL 来源：generated = 由表结构本地生成（可调选项）；server = SHOW CREATE TABLE 原文
-const ddlMode = ref('generated')
+const ddlMode = ref('server')
+const isMySql = computed(() => (props.connection.databaseType || 'mysql') === 'mysql')
 const ddlOptions = reactive({ ...defaultDdlOptions })
 
 const generatedDdl = computed(() => {
@@ -33,14 +35,14 @@ const generatedDdl = computed(() => {
 })
 
 const currentDdl = computed(() =>
-  ddlMode.value === 'server' ? schema.value?.ddl || '' : generatedDdl.value,
+  !isMySql.value || ddlMode.value === 'server' ? schema.value?.ddl || '' : generatedDdl.value,
 )
 
 async function load() {
-  if (!props.database || !props.table) return
+  if (!props.connected || !props.database || !props.table) { schema.value = null; return }
   loading.value = true
   try {
-    schema.value = await api.tableSchema(props.connection, props.database, props.table)
+    schema.value = await api.tableSchema(props.connection, props.database, props.table, props.objectSchema)
   } catch (e) {
     notifyError(e.message, '加载表结构失败')
     schema.value = null
@@ -49,7 +51,7 @@ async function load() {
   }
 }
 
-watch(() => [props.database, props.table], load, { immediate: true })
+watch(() => [props.database, props.objectSchema, props.table, props.connected], load, { immediate: true })
 
 async function copyDdl() {
   const text = currentDdl.value
@@ -159,7 +161,7 @@ function keyTag(key) {
             <div class="ddl-head">
               <div class="ddl-title">
                 <span class="block-title">建表语句（DDL）</span>
-                <el-radio-group v-model="ddlMode" size="small">
+                <el-radio-group v-if="isMySql" v-model="ddlMode" size="small">
                   <el-radio-button value="generated">按结构生成</el-radio-button>
                   <el-radio-button value="server">服务端原文</el-radio-button>
                 </el-radio-group>
@@ -178,7 +180,9 @@ function keyTag(key) {
             </div>
           </template>
 
-          <div v-if="ddlMode === 'generated'" class="ddl-options">
+          <el-alert v-for="warning in schema?.warnings || []" :key="warning" :title="warning" type="info" :closable="false" />
+          <p v-if="!isMySql" class="hint">{{ schema?.ddlSource === 'native' ? '数据库定义' : '根据系统目录生成' }}</p>
+          <div v-if="isMySql && ddlMode === 'generated'" class="ddl-options">
             <el-checkbox v-model="ddlOptions.ifNotExists">IF NOT EXISTS</el-checkbox>
             <el-checkbox v-model="ddlOptions.dropIfExists">前置 DROP TABLE</el-checkbox>
             <el-checkbox v-model="ddlOptions.includeIndexes">包含索引</el-checkbox>

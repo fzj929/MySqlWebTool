@@ -5,6 +5,6 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PORT=${1:-5080}
 
 cd "$SCRIPT_DIR"
-echo "MySQL Web Tool: http://localhost:${PORT}"
+echo "DataPilot: http://localhost:${PORT}"
 echo "Press Ctrl+C to stop."
-exec dotnet MySqlTool.Api.dll --urls "http://0.0.0.0:${PORT}"
+exec dotnet DataPilot.Api.dll --urls "http://0.0.0.0:${PORT}"

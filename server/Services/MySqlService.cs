@@ -2,10 +2,10 @@ using System.Data;
 using System.Diagnostics;
 using System.Text;
 using MySqlConnector;
-using MySqlTool.Api.Models;
-using ConnectionInfo = MySqlTool.Api.Models.ConnectionInfo;
+using DataPilot.Api.Models;
+using ConnectionInfo = DataPilot.Api.Models.ConnectionInfo;
 
-namespace MySqlTool.Api.Services;
+namespace DataPilot.Api.Services;
 
 public interface IMySqlService
 {

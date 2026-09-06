@@ -1,4 +1,4 @@
-namespace MySqlTool.Api.Services;
+namespace DataPilot.Api.Services;
 
 /// <summary>
 /// MySQL 标识符（库名/表名/列名）转义。

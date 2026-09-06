@@ -1,12 +1,19 @@
 using System.Text.Json.Serialization;
 
-namespace MySqlTool.Api.Models;
+namespace DataPilot.Api.Models;
 
 /// <summary>
 /// 连接信息。由前端在每次请求时携带，服务端不持久化密码。
 /// </summary>
 public sealed class ConnectionInfo
 {
+    public string DatabaseType { get; set; } = "mysql";
+    public string Schema { get; set; } = "";
+    public string? FileId { get; set; }
+    public bool ReadOnly { get; set; }
+    public bool Encrypt { get; set; } = true;
+    public bool TrustServerCertificate { get; set; }
+    public string SslMode { get; set; } = "Prefer";
     public string Host { get; set; } = "127.0.0.1";
     public int Port { get; set; } = 3306;
     public string User { get; set; } = "root";
@@ -16,6 +23,13 @@ public sealed class ConnectionInfo
 
     public void Validate()
     {
+        if (DatabaseType is not ("mysql" or "sqlserver" or "postgresql" or "sqlite"))
+            throw new ArgumentException("不支持的数据库类型");
+        if (DatabaseType == "sqlite")
+        {
+            if (!Guid.TryParseExact(FileId, "N", out _)) throw new ArgumentException("请选择已上传的 SQLite 数据库");
+            return;
+        }
         if (string.IsNullOrWhiteSpace(Host)) throw new ArgumentException("主机地址不能为空");
         if (Port is < 1 or > 65535) throw new ArgumentException("端口必须在 1-65535 之间");
         if (string.IsNullOrWhiteSpace(User)) throw new ArgumentException("用户名不能为空");
@@ -24,12 +38,14 @@ public sealed class ConnectionInfo
 
 public sealed class SchemaRequest
 {
+    public string Schema { get; set; } = "";
     public ConnectionInfo? Connection { get; set; }
     public string Database { get; set; } = "";
 }
 
 public sealed class TableSchemaRequest
 {
+    public string Schema { get; set; } = "";
     public ConnectionInfo? Connection { get; set; }
     public string Database { get; set; } = "";
     public string Table { get; set; } = "";
@@ -45,6 +61,7 @@ public sealed class QueryRequest
 
 public sealed class TableDataRequest
 {
+    public string Schema { get; set; } = "";
     public ConnectionInfo? Connection { get; set; }
     public string Database { get; set; } = "";
     public string Table { get; set; } = "";
@@ -85,6 +102,7 @@ public sealed class DatabaseItem
 
 public sealed class TableItem
 {
+    public string Schema { get; set; } = "";
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
     public string? Engine { get; set; }
@@ -136,6 +154,8 @@ public sealed class TableMeta
 
 public sealed class TableSchemaResult
 {
+    public string DdlSource { get; set; } = "native";
+    public List<string> Warnings { get; set; } = new();
     public List<ColumnInfo> Columns { get; set; } = new();
     public List<IndexInfo> Indexes { get; set; } = new();
 
