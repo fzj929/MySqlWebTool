@@ -1,6 +1,7 @@
 <script setup>
-import { ref, watch } from 'vue'
-import { notifyError, notifyInfo, notifySuccess, notifyWarning } from '../utils/notify'
+import { nextTick, ref, watch } from 'vue'
+import { notifyError, notifySuccess, notifyWarning } from '../utils/notify'
+import { loadSqlHistory, saveSqlHistory, clearSqlHistory } from '../utils/sqlHistory'
 import { api, exportCsv } from '../api'
 import ResultTable from './ResultTable.vue'
 
@@ -11,6 +12,27 @@ const props = defineProps({
 
 const sql = ref('')
 const sqlEditor = ref(null)
+const sqlHistory = ref(loadSqlHistory())
+const selectedHistory = ref(null)
+
+async function selectHistory(text) {
+  sql.value = text
+  await nextTick()
+  selectedHistory.value = null
+  sqlEditor.value?.focus()
+  sqlEditor.value?.setSelectionRange(0, 0)
+}
+
+function clearHistory() {
+  try {
+    clearSqlHistory()
+    sqlHistory.value = []
+    selectedHistory.value = null
+    notifySuccess('本地 SQL 历史已清空')
+  } catch {
+    notifyError('无法清空本地 SQL 历史，请检查浏览器存储设置')
+  }
+}
 const limit = ref(1000)
 const loading = ref(false)
 const result = ref(null)
@@ -35,6 +57,11 @@ async function execute() {
 
   loading.value = true
   const generation = ++requestGeneration
+  try {
+    sqlHistory.value = saveSqlHistory(text)
+  } catch {
+    notifyWarning('无法保存 SQL 历史，请检查浏览器存储空间或设置；SQL 将继续执行')
+  }
   try {
     const response = await api.query(props.connection, text, limit.value)
     if (generation === requestGeneration) result.value = response
@@ -126,6 +153,19 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
     </div>
 
     <div class="editor-wrap">
+      <div class="history-toolbar">
+        <el-select v-model="selectedHistory" class="history-select" size="small" filterable
+          placeholder="历史 SQL（仅保存在本地）" aria-label="历史 SQL"
+          no-data-text="暂无执行历史" no-match-text="没有匹配的 SQL"
+          @visible-change="visible => { if (visible) sqlHistory = loadSqlHistory() }"
+          @change="selectHistory">
+          <el-option v-for="(text, index) in sqlHistory" :key="index" :value="text" :label="text">
+            <span :title="text" class="history-preview mono">{{ text.replace(/\s+/g, ' ') }}</span>
+          </el-option>
+        </el-select>
+        <el-button size="small" :disabled="!sqlHistory.length" @click="clearHistory">清空历史</el-button>
+        <span class="hint">最近 {{ sqlHistory.length }} / 100 条 · 选择后回填编辑器</span>
+      </div>
       <textarea
         ref="sqlEditor"
         v-model="sql"
@@ -171,6 +211,26 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
 
 .editor-wrap {
   padding: 8px 12px;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.history-select {
+  width: min(420px, 100%);
+}
+
+.history-preview {
+  display: block;
+  max-width: 580px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sql-editor {
