@@ -7,6 +7,22 @@ using Microsoft.Extensions.Configuration;
 static void Check(bool ok, string message) { if (!ok) throw new Exception(message); }
 var config = new ConfigurationBuilder().Build();
 var service = new DatabaseService(config, null!, null!);
+using (var batchConnection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:"))
+{
+    await batchConnection.OpenAsync();
+    async Task<QueryResult> RunBatch(string sql, int limit = 1) =>
+        await (Task<QueryResult>)typeof(DatabaseService).GetMethod("Run", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(service, new object[] { batchConnection, sql, limit, CancellationToken.None })!;
+    var batch = await RunBatch("CREATE TABLE sample (id INTEGER); INSERT INTO sample VALUES (1), (2); SELECT id FROM sample ORDER BY id; SELECT 'next' AS label; SELECT id FROM sample WHERE 1=0;");
+    Check(batch.ResultSets.Count == 3, "Keep all row-producing results in mixed DDL/DML/SELECT batch");
+    Check(batch.ResultSets[0].Rows.Count == 1 && batch.ResultSets[0].Truncated, "Apply first result limit");
+    Check(batch.ResultSets[1].Columns.Single() == "label" && (string?)batch.ResultSets[1].Rows[0][0] == "next" && !batch.ResultSets[1].Truncated, "Read next result independently after truncation");
+    Check(batch.ResultSets[2].Columns.Single() == "id" && batch.ResultSets[2].RowCount == 0, "Keep empty result metadata");
+    Check(batch.IsQuery && batch.Columns.SequenceEqual(batch.ResultSets[0].Columns) && batch.RowCount == 1, "Preserve first-result compatibility");
+    var update = await RunBatch("UPDATE sample SET id=id+1;");
+    Check(!update.IsQuery && update.ResultSets.Count == 0 && update.RowsAffected == 2, "DML-only affected rows");
+    Console.WriteLine("PASS: multiple result sets with real SQLite reader, per-result limits, empty result, DML and legacy fields");
+}
 Check(DatabaseService.CreateDatabaseSql("mysql", "a`; DROP DATABASE x; --") == "CREATE DATABASE `a``; DROP DATABASE x; --`", "MySQL database name stays a single quoted identifier");
 Check(DatabaseService.CreateDatabaseSql("sqlserver", "a]b") == "CREATE DATABASE [a]]b]", "SQL Server database identifier escaping");
 Check(DatabaseService.CreateDatabaseSql("postgresql", "a\"b") == "CREATE DATABASE \"a\"\"b\"", "PostgreSQL database identifier escaping");

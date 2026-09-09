@@ -96,8 +96,18 @@ public sealed class TableDataRequest
     public string? OrderBy { get; set; }
 }
 
+public class QueryResultSet
+{
+    public int RowCount { get; set; }
+    public bool Truncated { get; set; }
+    public List<string> Columns { get; set; } = new();
+    public List<ColumnMeta> ColumnTypes { get; set; } = new();
+    public List<object?[]> Rows { get; set; } = new();
+}
+
 public class QueryResult
 {
+    public List<QueryResultSet> ResultSets { get; set; } = new();
     public bool IsQuery { get; set; }
     public int RowCount { get; set; }
     public int RowsAffected { get; set; }

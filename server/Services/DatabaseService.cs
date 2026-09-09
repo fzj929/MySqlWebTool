@@ -229,20 +229,19 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
         using var cmd = Command(c, sql);
         using var reader = await cmd.ExecuteReaderAsync(ct);
         var result = new QueryResult();
-        // Execute the complete batch; display its first row-producing result.
+        // Keep every row-producing result, including empty result sets.
         do
         {
             if (reader.FieldCount == 0) continue;
-            if (result.IsQuery) { while (await reader.ReadAsync(ct)) { } continue; }
-            result.IsQuery = true;
+            var set = new QueryResultSet();
             for (var i = 0; i < reader.FieldCount; i++)
             {
-                result.Columns.Add(reader.GetName(i));
-                result.ColumnTypes.Add(new ColumnMeta { Name = reader.GetName(i), DataType = reader.GetDataTypeName(i) });
+                set.Columns.Add(reader.GetName(i));
+                set.ColumnTypes.Add(new ColumnMeta { Name = reader.GetName(i), DataType = reader.GetDataTypeName(i) });
             }
             while (await reader.ReadAsync(ct))
             {
-                if (result.Rows.Count >= limit) { result.Truncated = true; continue; }
+                if (set.Rows.Count >= limit) { set.Truncated = true; continue; }
                 var values = new object?[reader.FieldCount];
                 for (var i = 0; i < values.Length; i++)
                 {
@@ -251,13 +250,24 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
                         ? dm.GetDmDecimal(i).ToString() : reader is OracleDataReader oracle && !reader.IsDBNull(i) && reader.GetFieldType(i) == typeof(decimal)
                         ? oracle.GetOracleDecimal(i).ToString() : Normalize(reader.GetValue(i));
                 }
-                result.Rows.Add(values);
+                set.Rows.Add(values);
             }
+            set.RowCount = set.Rows.Count;
+            result.ResultSets.Add(set);
         } while (await reader.NextResultAsync(ct));
+        result.IsQuery = result.ResultSets.Count > 0;
+        // Preserve the first-result fields used by table browsing and CSV export.
+        if (result.ResultSets.FirstOrDefault() is { } first)
+        {
+            result.Columns = first.Columns;
+            result.ColumnTypes = first.ColumnTypes;
+            result.Rows = first.Rows;
+            result.Truncated = first.Truncated;
+        }
         result.RowsAffected = Math.Max(0, reader.RecordsAffected);
         result.RowCount = result.Rows.Count;
         result.ElapsedMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
-        result.Message = result.IsQuery ? "显示批次中的第一个结果集" : $"执行成功，影响行数 {result.RowsAffected}";
+        result.Message = result.IsQuery ? $"返回 {result.ResultSets.Count} 个结果集" : $"执行成功，影响行数 {result.RowsAffected}";
         return result;
     }
 
