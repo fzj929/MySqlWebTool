@@ -123,10 +123,20 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
 <template>
   <div class="query-panel">
     <div class="toolbar">
-      <el-button type="primary" size="small" :loading="loading" @click="execute">
+      <el-button type="primary" size="small" :loading="loading" title="Ctrl + Enter · 有选区时执行选中内容，否则执行全部" @click="execute">
         <el-icon><VideoPlay /></el-icon> 执行
       </el-button>
-      <span class="hint">Ctrl + Enter · 有选区时执行选中内容，否则执行全部</span>
+      <el-select v-model="selectedHistory" class="history-select" size="small" filterable
+        placeholder="历史 SQL（本地）" aria-label="历史 SQL"
+        :title="`最近 ${sqlHistory.length} / 100 条 · 选择后回填编辑器`"
+        no-data-text="暂无执行历史" no-match-text="没有匹配的 SQL"
+        @visible-change="visible => { if (visible) sqlHistory = loadSqlHistory() }"
+        @change="selectHistory">
+        <el-option v-for="(text, index) in sqlHistory" :key="index" :value="text" :label="text">
+          <span :title="text" class="history-preview mono">{{ text.replace(/\s+/g, ' ') }}</span>
+        </el-option>
+      </el-select>
+      <el-button size="small" :disabled="!sqlHistory.length" @click="clearHistory">清空历史</el-button>
       <el-button size="small" :loading="exporting" :disabled="!sql.trim()" @click="onExport">
         <el-icon><Download /></el-icon> 导出 CSV
       </el-button>
@@ -153,19 +163,6 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
     </div>
 
     <div class="editor-wrap">
-      <div class="history-toolbar">
-        <el-select v-model="selectedHistory" class="history-select" size="small" filterable
-          placeholder="历史 SQL（仅保存在本地）" aria-label="历史 SQL"
-          no-data-text="暂无执行历史" no-match-text="没有匹配的 SQL"
-          @visible-change="visible => { if (visible) sqlHistory = loadSqlHistory() }"
-          @change="selectHistory">
-          <el-option v-for="(text, index) in sqlHistory" :key="index" :value="text" :label="text">
-            <span :title="text" class="history-preview mono">{{ text.replace(/\s+/g, ' ') }}</span>
-          </el-option>
-        </el-select>
-        <el-button size="small" :disabled="!sqlHistory.length" @click="clearHistory">清空历史</el-button>
-        <span class="hint">最近 {{ sqlHistory.length }} / 100 条 · 选择后回填编辑器</span>
-      </div>
       <textarea
         ref="sqlEditor"
         v-model="sql"
@@ -213,16 +210,23 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
   padding: 8px 12px;
 }
 
-.history-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+.toolbar {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.toolbar > :deep(*) {
+  flex-shrink: 0;
+}
+
+.toolbar :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .history-select {
-  width: min(420px, 100%);
+  width: 220px;
 }
 
 .history-preview {
@@ -235,7 +239,7 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
 
 .sql-editor {
   width: 100%;
-  height: 160px;
+  height: 192px;
   resize: vertical;
   border: 1px solid var(--border);
   border-radius: 6px;
