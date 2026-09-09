@@ -25,11 +25,31 @@ public static class ApiEndpoints
                 return Results.Ok(result);
             }));
 
+        api.MapPost("/connection/string", (ConnectionInfo? info, DatabaseService svc, HttpResponse response) =>
+            Safe(() => {
+                response.Headers["Cache-Control"] = "no-store";
+                return Task.FromResult<IResult>(Results.Ok(new { connectionString = svc.DefaultConnectionString(Require(info)) }));
+            }));
+        api.MapPost("/connection/string/test", async (ConnectionStringRequest req, DatabaseService svc, HttpResponse response, CancellationToken ct) => {
+            response.Headers["Cache-Control"] = "no-store";
+            try { return Results.Ok(await svc.TestConnectionStringAsync(req, ct)); }
+            // Driver exceptions can echo parts of a supplied string. Never return/log them here.
+            catch (OperationCanceledException) { return Results.Json(new ApiError { Error = "连接测试超时或已取消" }, statusCode: 408); }
+            catch { return Results.BadRequest(new ApiError { Error = "连接测试失败。请检查字符串格式、账号密码、网络和默认字段范围；SQLite 不允许修改文件路径或访问模式。" }); }
+        });
+
         api.MapPost("/schema/databases", async (ConnectionInfo? info, DatabaseService svc, CancellationToken ct) =>
             await Safe(async () =>
             {
                 var items = await svc.GetDatabasesAsync(Require(info), ct);
                 return Results.Ok(new { items });
+            }));
+
+        api.MapPost("/schema/databases/create", async (CreateDatabaseRequest req, DatabaseService svc, CancellationToken ct) =>
+            await Safe(async () =>
+            {
+                await svc.CreateDatabaseAsync(Require(req.Connection), req.Name, ct);
+                return Results.Ok(new { ok = true });
             }));
 
         api.MapPost("/schema/schemas", async (SchemaRequest req, DatabaseService svc, CancellationToken ct) =>

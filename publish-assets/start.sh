@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-PORT=${1:-5080}
+PORT=${1:-8088}
 
 cd "$SCRIPT_DIR"
-echo "DataPilot: http://localhost:${PORT}"
+echo "DataPilot: https://localhost:${PORT}"
 echo "Press Ctrl+C to stop."
-exec dotnet DataPilot.Api.dll --urls "http://0.0.0.0:${PORT}"
+exec dotnet DataPilot.Api.dll --environment Production --https-port "$PORT"

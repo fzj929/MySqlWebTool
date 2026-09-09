@@ -3,7 +3,7 @@ set -euo pipefail
 
 ACTION=${1:-}
 SERVICE_NAME=${2:-DataPilot}
-PORT=${3:-5080}
+PORT=${3:-8088}
 SERVICE_USER=${4:-${SUDO_USER:-root}}
 DOTNET_OVERRIDE=${5:-${DOTNET_PATH:-}}
 
@@ -107,8 +107,12 @@ case "$ACTION" in
       echo "[Service]"
       echo "Type=simple"
       echo "User=$SERVICE_USER"
+      if (( PORT < 1024 )); then
+        echo "AmbientCapabilities=CAP_NET_BIND_SERVICE"
+        echo "CapabilityBoundingSet=CAP_NET_BIND_SERVICE"
+      fi
       printf 'WorkingDirectory=%s\n' "$ESCAPED_DIR"
-      echo "ExecStart=\"$ESCAPED_DOTNET\" \"$ESCAPED_DLL\" --urls \"http://0.0.0.0:$PORT\""
+      echo "ExecStart=\"$ESCAPED_DOTNET\" \"$ESCAPED_DLL\" --environment Production --https-port $PORT"
       echo "Environment=ASPNETCORE_ENVIRONMENT=Production"
       echo "Environment=\"DataPilot__SqliteDirectory=$(escape_systemd_value "$DATA_DIR")\""
       echo "Restart=on-failure"

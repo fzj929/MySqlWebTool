@@ -6,8 +6,8 @@ set "ROOT=%~dp0"
 set "DOTNET_EXE=C:\Users\Administrator\.dotnet8\dotnet.exe"
 if not exist "%DOTNET_EXE%" set "DOTNET_EXE=dotnet"
 
-echo Starting backend : http://localhost:5080
-start "DataPilot-Server" cmd /k "cd /d "%ROOT%server" && "%DOTNET_EXE%" run --urls http://localhost:5080"
+echo Starting backend : http://localhost:8088
+start "DataPilot-Server" cmd /k "cd /d "%ROOT%server" && "%DOTNET_EXE%" run --urls http://localhost:8088"
 
 timeout /t 3 /nobreak >nul
 

@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using MySqlConnector;
 using Npgsql;
 using Dm;
+using Oracle.ManagedDataAccess.Client;
 using DataPilot.Api.Models;
 using ConnectionInfo = DataPilot.Api.Models.ConnectionInfo;
 
@@ -31,12 +32,12 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
     }
 
     public static string Schema(ConnectionInfo info, string value) => !string.IsNullOrEmpty(value) ? value :
-        !string.IsNullOrEmpty(info.Schema) ? info.Schema : info.DatabaseType == "dm8" ? "" : info.DatabaseType == "sqlserver" ? "dbo" : "public";
+        !string.IsNullOrEmpty(info.Schema) ? info.Schema : info.DatabaseType is "dm8" or "oracle" ? "" : info.DatabaseType == "sqlserver" ? "dbo" : "public";
 
     public static string Qualified(ConnectionInfo info, string database, string schema, string table) => info.DatabaseType switch {
         "mysql" => Quote("mysql", database) + "." + Quote("mysql", table),
         "sqlite" => Quote("sqlite", table),
-        "dm8" when string.IsNullOrEmpty(Schema(info, schema)) => Quote("dm8", table),
+        "dm8" or "oracle" when string.IsNullOrEmpty(Schema(info, schema)) => Quote(info.DatabaseType, table),
         _ => Quote(info.DatabaseType, Schema(info, schema)) + "." + Quote(info.DatabaseType, table)
     };
 
@@ -49,6 +50,11 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
         {
             await using var c = CreateConnection(info, database);
             if (c.State != System.Data.ConnectionState.Open) await c.OpenAsync(ct);
+            if (c is OracleConnection && !string.IsNullOrWhiteSpace(info.Schema))
+            {
+                using var schemaCommand = Command(c, "ALTER SESSION SET CURRENT_SCHEMA = " + Quote("oracle", info.Schema));
+                await schemaCommand.ExecuteNonQueryAsync(ct);
+            }
             if (c is SqliteConnection sc)
             {
                 var until = DateTime.UtcNow.AddSeconds(Timeout);
@@ -86,6 +92,7 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
             }.ToString()),
             "sqlite" => SqliteStore.Open(files.FilePath(info.FileId!), info.ReadOnly),
             "dm8" => CreateDmConnection(info, connectTimeout),
+            "oracle" => CreateOracleConnection(info, connectTimeout),
             _ => throw new ArgumentException("不支持的数据库")
         };
     }
@@ -93,6 +100,20 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
     private DbCommand Command(DbConnection c, string sql, params (string Name, object? Value)[] parameters)
     {
         var cmd = c.CreateCommand();
+        if (cmd is OracleCommand oracle)
+        {
+            oracle.BindByName = true;
+            oracle.InitialLONGFetchSize = -1;
+            // Only our metadata SQL uses positional placeholders; never rewrite user SQL literals.
+            if (parameters.Length > 0)
+            {
+                var index = 0;
+                sql = System.Text.RegularExpressions.Regex.Replace(sql, @"\?", _ => ":p" + index++);
+                if (index != parameters.Length) throw new InvalidOperationException("Oracle metadata parameter count mismatch.");
+                parameters = parameters.Select((p, i) => ("p" + i, p.Value)).ToArray();
+            }
+            else sql = OracleSql(sql);
+        }
         cmd.CommandText = sql;
         cmd.CommandTimeout = Timeout;
         foreach (var (name, value) in parameters)
@@ -128,6 +149,29 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
         }), ct);
     }
 
+    public static string CreateDatabaseSql(string type, string name)
+    {
+        var maxLength = type switch {
+            "mysql" => 64, "sqlserver" => 128, "postgresql" => 63,
+            _ => throw new ArgumentException("当前数据库类型不支持通过此入口创建数据库")
+        };
+        if (string.IsNullOrWhiteSpace(name) || name != name.Trim() || name.Any(char.IsControl) ||
+            (type == "postgresql" ? Encoding.UTF8.GetByteCount(name) : name.Length) > maxLength)
+            throw new ArgumentException($"数据库名称不能为空、包含控制字符或首尾空格，且不能超过 {maxLength} {(type == "postgresql" ? "个 UTF-8 字节" : "个字符")}");
+        return "CREATE DATABASE " + Quote(type, name);
+    }
+
+    public async Task CreateDatabaseAsync(ConnectionInfo info, string name, CancellationToken ct)
+    {
+        var sql = CreateDatabaseSql(info.DatabaseType, name);
+        if (info.ReadOnly) throw new ArgumentException("只读连接不能创建数据库");
+        // Execute as a standalone command: PostgreSQL CREATE DATABASE cannot run in a transaction.
+        await WithConnection(info, info.DatabaseType == "sqlserver" ? "master" : null, async c => {
+            using var cmd = Command(c, sql);
+            return await cmd.ExecuteNonQueryAsync(ct);
+        }, ct);
+    }
+
     public async Task<List<DatabaseItem>> GetDatabasesAsync(ConnectionInfo info, CancellationToken ct)
     {
         if (info.DatabaseType == "mysql") return await mysql.GetDatabasesAsync(info, ct);
@@ -135,6 +179,7 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
             if (info.DatabaseType == "sqlite") return new List<DatabaseItem> { new() { Name = "main", Charset = "UTF-8" } };
             // DM8 endpoints identify an instance, not a list of switchable MySQL-style databases.
             if (info.DatabaseType == "dm8") return new List<DatabaseItem> { new() { Name = string.IsNullOrWhiteSpace(c.Database) ? "DM8" : c.Database } };
+            if (info.DatabaseType == "oracle") return new List<DatabaseItem> { new() { Name = info.Database! } };
             var sql = info.DatabaseType == "sqlserver"
                 ? "SELECT name FROM sys.databases WHERE state=0 AND HAS_DBACCESS(name)=1 ORDER BY name"
                 : "SELECT datname AS name FROM pg_database WHERE datallowconn AND NOT datistemplate AND has_database_privilege(datname,'CONNECT') ORDER BY datname";
@@ -145,10 +190,10 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
     public Task<List<DatabaseItem>> SchemasAsync(ConnectionInfo info, string database, CancellationToken ct) =>
         WithConnection(info, database, async c => {
             if (info.DatabaseType is "mysql" or "sqlite") return new List<DatabaseItem>();
-            if (info.DatabaseType == "dm8") return (await Rows(c, """
-                SELECT DISTINCT OWNER AS name FROM ALL_OBJECTS WHERE OBJECT_TYPE IN ('TABLE','VIEW')
-                UNION SELECT SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()) AS name FROM DUAL ORDER BY name
-                """, ct)).Select(r => new DatabaseItem { Name = S(r, "name") }).ToList();
+            if (info.DatabaseType is "dm8" or "oracle") return (await Rows(c,
+                "SELECT DISTINCT OWNER AS name FROM ALL_OBJECTS WHERE OBJECT_TYPE IN ('TABLE','VIEW') UNION SELECT " +
+                (info.DatabaseType == "oracle" ? "SYS_CONTEXT('USERENV','CURRENT_SCHEMA')" : "SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID())") +
+                " AS name FROM DUAL ORDER BY name", ct)).Select(r => new DatabaseItem { Name = S(r, "name") }).ToList();
             var sql = info.DatabaseType == "postgresql"
                 ? "SELECT nspname AS name FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema' AND has_schema_privilege(oid,'USAGE') ORDER BY nspname"
                 : "SELECT name FROM sys.schemas WHERE name NOT IN ('sys','INFORMATION_SCHEMA') AND schema_id < 16384 ORDER BY name";
@@ -159,7 +204,7 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
     {
         if (info.DatabaseType == "mysql") return await mysql.GetTablesAsync(info, database, ct);
         return await WithConnection(info, database, async c => {
-            if (info.DatabaseType == "dm8") return await DmTables(c, Schema(info, schema), ct);
+            if (info.DatabaseType is "dm8" or "oracle") return await DmTables(c, Schema(info, schema), ct);
             var sql = info.DatabaseType switch {
                 "sqlite" => "SELECT name, CASE type WHEN 'view' THEN 'VIEW' ELSE 'BASE TABLE' END AS type FROM sqlite_schema WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name",
                 "postgresql" => "SELECT c.relname AS name, CASE WHEN c.relkind IN ('v','m') THEN 'VIEW' ELSE 'BASE TABLE' END AS type FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=@schema AND c.relkind IN ('r','p','v','m') ORDER BY c.relname",
@@ -203,7 +248,8 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
                 {
                     // DM DECIMAL(38) exceeds System.Decimal's 28-29 digits. Keep the provider's exact representation.
                     values[i] = reader is DmDataReader dm && !reader.IsDBNull(i) && reader.GetFieldType(i) == typeof(decimal)
-                        ? dm.GetDmDecimal(i).ToString() : Normalize(reader.GetValue(i));
+                        ? dm.GetDmDecimal(i).ToString() : reader is OracleDataReader oracle && !reader.IsDBNull(i) && reader.GetFieldType(i) == typeof(decimal)
+                        ? oracle.GetOracleDecimal(i).ToString() : Normalize(reader.GetValue(i));
                 }
                 result.Rows.Add(values);
             }
@@ -243,7 +289,7 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
             var order = string.IsNullOrWhiteSpace(req.OrderBy) ? "" : " ORDER BY " + req.OrderBy;
             if (order == "")
             {
-                var keys = info.DatabaseType == "dm8"
+                var keys = info.DatabaseType is "dm8" or "oracle"
                     ? await DmPrimaryKeyColumns(c, await DmSchemaName(c, Schema(info, req.Schema), ct), req.Table, ct)
                     : (await SchemaOnConnection(info, c, req.Database, req.Schema, req.Table, ct)).IndexDefinitions.FirstOrDefault(x => x.Primary)?.Columns;
                 if (keys?.Count > 0) order = " ORDER BY " + string.Join(", ", keys.Select(k => Quote(info.DatabaseType, k)));
@@ -254,7 +300,7 @@ public sealed partial class DatabaseService(IConfiguration config, MySqlService 
             var offset = ((long)page - 1) * size;
             using var count = Command(c, $"SELECT COUNT(*) FROM {name}{w}");
             var total = Convert.ToInt64(await count.ExecuteScalarAsync(ct));
-            var paging = info.DatabaseType == "sqlserver" ? $" OFFSET {offset} ROWS FETCH NEXT {size} ROWS ONLY" : $" LIMIT {size} OFFSET {offset}";
+            var paging = info.DatabaseType is "sqlserver" or "oracle" ? $" OFFSET {offset} ROWS FETCH NEXT {size} ROWS ONLY" : $" LIMIT {size} OFFSET {offset}";
             var result = await Run(c, $"SELECT * FROM {name}{w}{order}{paging}", size, ct);
             return new TableDataResult { Columns = result.Columns, ColumnTypes = result.ColumnTypes, Rows = result.Rows,
                 RowCount = result.RowCount, IsQuery = true, ElapsedMs = result.ElapsedMs, Total = total, Page = page, PageSize = size };

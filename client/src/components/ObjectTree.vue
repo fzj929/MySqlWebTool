@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { notifyError } from '../utils/notify'
+import { notifyError, notifySuccess } from '../utils/notify'
 import { api } from '../api'
 
 const props = defineProps({
@@ -10,7 +10,45 @@ const props = defineProps({
   reloadKey: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['select-database', 'select-schema', 'select-table'])
+const emit = defineEmits(['select-database', 'select-schema', 'select-table', 'database-created'])
+
+const createVisible = ref(false)
+const databaseName = ref('')
+const creating = ref(false)
+const createError = ref('')
+const supportsCreate = computed(() => ['mysql', 'sqlserver', 'postgresql'].includes(props.connection.databaseType))
+let createGeneration = 0
+watch(() => [props.connected, JSON.stringify(props.connection)], () => {
+  createGeneration++
+  createVisible.value = false
+})
+
+function openCreate() {
+  databaseName.value = ''
+  createError.value = ''
+  createVisible.value = true
+}
+
+async function createDatabase() {
+  if (creating.value || !props.connected || !supportsCreate.value || props.connection.readOnly) return
+  const name = databaseName.value.trim()
+  if (!name) { createError.value = '请输入数据库名称'; return }
+  const generation = createGeneration
+  creating.value = true
+  createError.value = ''
+  try {
+    await api.createDatabase({ ...props.connection }, name)
+    if (generation !== createGeneration) return
+    createVisible.value = false
+    filterText.value = ''
+    notifySuccess(`数据库 ${name} 已创建`, '创建成功')
+    emit('database-created')
+  } catch (e) {
+    if (generation === createGeneration) createError.value = e.message
+  } finally {
+    creating.value = false
+  }
+}
 
 const treeRef = ref()
 const filterText = ref('')
@@ -67,7 +105,7 @@ async function loadNode(node, resolve) {
 
   loading.value = true
   try {
-    if (data.type === 'db' && ['sqlserver','postgresql','dm8'].includes(props.connection.databaseType)) {
+    if (data.type === 'db' && ['sqlserver','postgresql','dm8','oracle'].includes(props.connection.databaseType)) {
       const res = await api.schemas(props.connection, data.name)
       const children = res.items.map(s => ({ key: JSON.stringify(['schema',data.name,s.name]), name: s.name, type: 'schema', database: data.name, leaf: false }))
       cache.value[data.key] = children; resolve(children); return
@@ -110,9 +148,28 @@ function onNodeClick(data) {
 <template>
   <div class="tree-panel">
     <div class="tree-head">
-      <span class="title">对象浏览器</span>
+      <div class="tree-toolbar">
+        <span class="title">对象浏览器</span>
+        <el-button v-if="supportsCreate" size="small" :disabled="!connected || connection.readOnly || creating" @click="openCreate">
+          <el-icon><Plus /></el-icon>创建数据库
+        </el-button>
+      </div>
       <el-input v-model="filterText" size="small" placeholder="搜索库 / 表" clearable />
     </div>
+
+    <el-dialog v-model="createVisible" title="创建数据库" width="min(440px, 92vw)" append-to-body
+      :close-on-click-modal="false" :close-on-press-escape="!creating" :show-close="!creating">
+      <el-form label-position="top" @submit.prevent="createDatabase">
+        <el-form-item label="数据库名称" :error="createError">
+          <el-input v-model="databaseName" aria-label="数据库名称" placeholder="请输入新数据库名称" :disabled="creating" />
+        </el-form-item>
+        <p class="hint">使用服务器默认字符集和排序规则。当前账号需要具有创建数据库权限。</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="creating" @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" :disabled="!databaseName.trim()" @click="createDatabase">创建</el-button>
+      </template>
+    </el-dialog>
 
     <div v-loading="loading" class="tree-body">
       <el-tree
@@ -165,6 +222,13 @@ function onNodeClick(data) {
 .title {
   font-weight: 600;
   font-size: 14px;
+}
+
+.tree-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .tree-body {

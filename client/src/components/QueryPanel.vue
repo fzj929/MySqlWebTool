@@ -10,6 +10,7 @@ const props = defineProps({
 })
 
 const sql = ref('')
+const sqlEditor = ref(null)
 const limit = ref(1000)
 const loading = ref(false)
 const result = ref(null)
@@ -18,9 +19,13 @@ let requestGeneration = 0
 watch(() => JSON.stringify(props.connection), clearResult)
 
 async function execute() {
-  const text = sql.value.trim()
+  const editor = sqlEditor.value
+  const hasSelection = editor && editor.selectionStart !== editor.selectionEnd
+  const text = (hasSelection
+    ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
+    : sql.value).trim()
   if (!text) {
-    notifyWarning('请输入要执行的 SQL')
+    notifyWarning(hasSelection ? '选中内容为空，请选择要执行的 SQL' : '请输入要执行的 SQL')
     return
   }
   if (!props.connected) {
@@ -94,7 +99,7 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
       <el-button type="primary" size="small" :loading="loading" @click="execute">
         <el-icon><VideoPlay /></el-icon> 执行
       </el-button>
-      <span class="hint">Ctrl + Enter</span>
+      <span class="hint">Ctrl + Enter · 有选区时执行选中内容，否则执行全部</span>
       <el-button size="small" :loading="exporting" :disabled="!sql.trim()" @click="onExport">
         <el-icon><Download /></el-icon> 导出 CSV
       </el-button>
@@ -122,6 +127,7 @@ defineExpose({ setSql, setSqlIfEmpty, clearResult })
 
     <div class="editor-wrap">
       <textarea
+        ref="sqlEditor"
         v-model="sql"
         class="sql-editor mono"
         spellcheck="false"

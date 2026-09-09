@@ -8,7 +8,7 @@ param(
     [string]$ServiceName = "DataPilot",
 
     [ValidateRange(1, 65535)]
-    [int]$Port = 5080
+    [int]$Port = 8088
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +40,7 @@ switch ($Action) {
         }
 
         $binaryPath = '"' + $dotnetCommand.Source + '" "' + $appDll +
-            '" --urls "http://0.0.0.0:' + $Port + '"'
+            '" --environment Production --https-port ' + $Port
         New-Service `
             -Name $ServiceName `
             -DisplayName "$ServiceName (DataPilot)" `

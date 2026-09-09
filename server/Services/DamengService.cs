@@ -26,7 +26,9 @@ public sealed partial class DatabaseService
     private async Task<string> DmSchemaName(DbConnection c, string schema, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(schema)) return schema;
-        var rows = await Rows(c, "SELECT SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()) AS name FROM DUAL", ct);
+        var rows = await Rows(c, c is Oracle.ManagedDataAccess.Client.OracleConnection
+            ? "SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') AS name FROM DUAL"
+            : "SELECT SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID()) AS name FROM DUAL", ct);
         return S(rows[0], "name");
     }
 
@@ -85,6 +87,23 @@ public sealed partial class DatabaseService
                 DefaultValue = row["default_value"]?.ToString(), Comment = S(row, "column_comment")
             });
         }
+        if (c is Oracle.ManagedDataAccess.Client.OracleConnection)
+        {
+            foreach (var row in await Rows(c, """
+                SELECT COLUMN_NAME AS name, CHAR_LENGTH AS char_length, CHAR_USED AS char_used,
+                    IDENTITY_COLUMN AS identity_column, VIRTUAL_COLUMN AS virtual_column
+                FROM ALL_TAB_COLS WHERE OWNER=? AND TABLE_NAME=?
+                """, ct, args))
+            {
+                var column = result.Columns.FirstOrDefault(x => x.Name == S(row, "name"));
+                if (column is null) continue;
+                if (column.DataType is "NCHAR" or "NVARCHAR2")
+                    column.ColumnType = column.DataType + "(" + S(row, "char_length") + ")";
+                else if (column.DataType is "CHAR" or "VARCHAR2" or "VARCHAR" && S(row, "char_used") == "C")
+                    column.ColumnType = column.DataType + "(" + S(row, "char_length") + " CHAR)";
+                column.Extra = S(row, "identity_column") == "YES" ? "IDENTITY" : S(row, "virtual_column") == "YES" ? "VIRTUAL" : "";
+            }
+        }
         var indexes = await Rows(c, """
             SELECT i.INDEX_NAME AS name, ic.COLUMN_NAME AS column_name, ic.COLUMN_POSITION AS seq,
                 CASE WHEN i.UNIQUENESS='UNIQUE' THEN 1 ELSE 0 END AS is_unique,
@@ -116,7 +135,7 @@ public sealed partial class DatabaseService
             result.DdlSource = "unavailable";
             result.Warnings.Add("无法读取 DBMS_METADATA.GET_DDL：请检查对象定义权限及服务器包支持。字段与索引仍可查看。");
         }
-        result.Warnings.Add("DM8 原生对象 DDL 不代表完整备份；独立索引、触发器、权限、依赖对象和数据请使用达梦原生备份工具迁移。");
+        result.Warnings.Add("原生对象 DDL 不代表完整备份；独立索引、触发器、权限、依赖对象和数据请使用数据库原生备份工具迁移。");
         return result;
     }
 }

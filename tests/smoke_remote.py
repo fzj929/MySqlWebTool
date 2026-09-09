@@ -15,7 +15,8 @@ def call(path,body):
         return response.read() if path.endswith("/export") else json.load(response)
 for info in json.loads(Path(args.connections).read_text(encoding="utf-8-sig")):
     kind=info["databaseType"]
-    assert kind in ("mysql","sqlserver","postgresql","dm8")
+    assert kind in ("mysql","sqlserver","postgresql","dm8","oracle")
+    if kind=="oracle": assert info.get("schema") and info.get("database"),"Choose a service and dedicated test schema"
     assert info.get("schema") if kind=="dm8" else info.get("database"),"Choose an existing dedicated test database/schema"
     info.setdefault("database", "")
     table="datapilot_test_"+uuid.uuid4().hex[:12]
@@ -32,7 +33,8 @@ for info in json.loads(Path(args.connections).read_text(encoding="utf-8-sig")):
         query("CREATE TABLE "+qualified+" (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR(80), amount DECIMAL(18,4))")
         created=True
         query("CREATE INDEX "+q(table+"_ix")+" ON "+qualified+" (name)")
-        query("INSERT INTO "+qualified+" VALUES (1,'alpha',123.4567),(2,'beta',NULL),(3,'gamma',3.5)")
+        for values in ["(1,'alpha',123.4567)","(2,'beta',NULL)","(3,'gamma',3.5)"]:
+            query("INSERT INTO "+qualified+" VALUES "+values)
         result=query("SELECT * FROM "+qualified+" ORDER BY id")
         assert result["rowCount"]==3 and result["rows"][0][2]=="123.4567"
         meta=call("/schema/table",{"connection":info,"database":info["database"],"schema":schema,"table":table})

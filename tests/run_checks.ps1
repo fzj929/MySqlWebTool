@@ -13,6 +13,8 @@ $published = Join-Path $repo $ReleaseDirectory
 if (-not (Test-Path (Join-Path $published "DataPilot.Api.dll"))) { throw "Run publish.bat first." }
 $previousDirectory = $env:DataPilot__SqliteDirectory
 $previousPythonPath = $env:PYTHONPATH
+$previousEnvironment = $env:ASPNETCORE_ENVIRONMENT
+$env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:DataPilot__SqliteDirectory = Join-Path $artifacts "data"
 $env:PYTHONPATH = (Join-Path $artifacts "python") + [IO.Path]::PathSeparator + $previousPythonPath
 $process = $null
@@ -39,4 +41,5 @@ try {
     if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
     $env:DataPilot__SqliteDirectory = $previousDirectory
     $env:PYTHONPATH = $previousPythonPath
+    $env:ASPNETCORE_ENVIRONMENT = $previousEnvironment
 }

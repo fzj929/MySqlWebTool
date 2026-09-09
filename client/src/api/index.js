@@ -15,8 +15,11 @@ http.interceptors.response.use(
 )
 
 export const api = {
+  connectionString: connection => http.post('/connection/string', connection),
+  testConnectionString: (connection, connectionString) => http.post('/connection/string/test', { connection, connectionString }),
   testConnection: (connection) => http.post('/connection/test', connection),
   databases: (connection) => http.post('/schema/databases', connection),
+  createDatabase: (connection, name) => http.post('/schema/databases/create', { connection, name }),
   schemas: (connection, database) => http.post('/schema/schemas', { connection, database }),
   tables: (connection, database, schema = '') => http.post('/schema/tables', { connection, database, schema }),
   tableSchema: (connection, database, table, schema = '') =>
@@ -73,7 +76,9 @@ export function loadSavedConnections() {
 
 export function persistConnection(item, rememberPassword) {
   const list = loadSavedConnections()
-  const id = JSON.stringify([item.databaseType || 'mysql', item.host, item.port, item.user, item.databaseType === 'dm8' ? item.schema || '' : item.database, item.fileId || ''])
+  const identity = [item.databaseType || 'mysql', item.host, item.port, item.user, item.databaseType === 'dm8' ? item.schema || '' : item.database, item.fileId || '']
+  if (item.databaseType === 'oracle') identity.push(item.oracleConnectionType || 'service', item.schema || '')
+  const id = JSON.stringify(identity)
   const existing = list.findIndex(x => x.id === id)
 
   const record = {

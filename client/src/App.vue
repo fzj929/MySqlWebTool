@@ -7,6 +7,7 @@ import ObjectTree from './components/ObjectTree.vue'
 import QueryPanel from './components/QueryPanel.vue'
 import TableDataPanel from './components/TableDataPanel.vue'
 import StructurePanel from './components/StructurePanel.vue'
+import ConnectionStringPanel from './components/ConnectionStringPanel.vue'
 import { defaults, selectSql } from './utils/database'
 
 const connection = reactive({
@@ -82,6 +83,11 @@ function handleSendToEditor(text) {
   activeTab.value = 'query'
 }
 
+async function onDatabaseCreated() {
+  const generation = connectionGeneration
+  if (await loadDatabases(generation)) reloadKey.value += 1
+}
+
 function onSelectDatabase(name) {
   connection.database = name
   connection.schema = ''
@@ -123,6 +129,7 @@ function onSelectTable({ database, schema, table }) {
           @select-database="onSelectDatabase"
           @select-schema="onSelectSchema"
           @select-table="onSelectTable"
+          @database-created="onDatabaseCreated"
         />
       </aside>
 
@@ -162,6 +169,9 @@ function onSelectTable({ database, schema, table }) {
               :connected="connected"
               @send-to-editor="handleSendToEditor"
             />
+          </el-tab-pane>
+          <el-tab-pane name="connection-string" label="连接字符串" lazy>
+            <ConnectionStringPanel :connection="connection" :active="activeTab === 'connection-string'" />
           </el-tab-pane>
         </el-tabs>
 

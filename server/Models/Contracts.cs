@@ -9,6 +9,7 @@ public sealed class ConnectionInfo
 {
     public string DatabaseType { get; set; } = "mysql";
     public string Schema { get; set; } = "";
+    public string OracleConnectionType { get; set; } = "service";
     public string? FileId { get; set; }
     public bool ReadOnly { get; set; }
     public bool Encrypt { get; set; } = true;
@@ -23,7 +24,7 @@ public sealed class ConnectionInfo
 
     public void Validate()
     {
-        if (DatabaseType is not ("mysql" or "sqlserver" or "postgresql" or "sqlite" or "dm8"))
+        if (DatabaseType is not ("mysql" or "sqlserver" or "postgresql" or "sqlite" or "dm8" or "oracle"))
             throw new ArgumentException("不支持的数据库类型");
         if (DatabaseType == "sqlite")
         {
@@ -33,7 +34,27 @@ public sealed class ConnectionInfo
         if (string.IsNullOrWhiteSpace(Host)) throw new ArgumentException("主机地址不能为空");
         if (Port is < 1 or > 65535) throw new ArgumentException("端口必须在 1-65535 之间");
         if (string.IsNullOrWhiteSpace(User)) throw new ArgumentException("用户名不能为空");
+        if (DatabaseType == "oracle")
+        {
+            if (OracleConnectionType is not ("service" or "sid")) throw new ArgumentException("请选择 Service Name 或 SID");
+            if (string.IsNullOrWhiteSpace(Database)) throw new ArgumentException("Oracle Service Name / SID 不能为空");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(Host, @"\A[A-Za-z0-9_.:\-]+\z") ||
+                !System.Text.RegularExpressions.Regex.IsMatch(Database, @"\A[A-Za-z0-9_.$#\-]+\z"))
+                throw new ArgumentException("Oracle 主机或 Service Name / SID 包含无效字符");
+        }
     }
+}
+
+public sealed class ConnectionStringRequest
+{
+    public ConnectionInfo? Connection { get; set; }
+    public string ConnectionString { get; set; } = "";
+}
+
+public sealed class CreateDatabaseRequest
+{
+    public ConnectionInfo? Connection { get; set; }
+    public string Name { get; set; } = "";
 }
 
 public sealed class SchemaRequest

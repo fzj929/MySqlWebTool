@@ -22,7 +22,8 @@ function connectionLabel(item) {
   const target = item.databaseType === 'sqlite'
     ? (item.fileName || item.fileId?.slice(0,8))
     : item.user + '@' + item.host + ':' + item.port + (item.databaseType === 'dm8' ? (item.schema ? ' / ' + item.schema : '') : (item.database ? ' / ' + item.database : ''))
-  return type + ' · ' + target
+  const detail = item.databaseType === 'oracle' ? ' [' + (item.oracleConnectionType === 'sid' ? 'SID' : 'Service') + (item.schema ? ' / ' + item.schema : '') + ']' : ''
+  return type + ' · ' + target + detail
 }
 async function refreshFiles() {
   try { const data = await api.sqliteFiles(); sqliteFiles.value = data.items; uploadLimit.value = data.maxUploadBytes }
@@ -96,6 +97,11 @@ async function forget() {
         <el-form-item label="用户"><el-input v-model="connection.user" style="width:110px" @change="disconnect" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="connection.password" type="password" show-password style="width:140px" @change="disconnect" /></el-form-item>
         <el-form-item v-if="connection.databaseType === 'dm8'" label="模式"><el-input v-model="connection.schema" style="width:135px" placeholder="留空使用默认模式" title="按服务器实际大小写填写模式名，不需要加双引号" @change="disconnect" /></el-form-item>
+        <template v-else-if="connection.databaseType === 'oracle'">
+          <el-form-item label="连接方式"><el-select v-model="connection.oracleConnectionType" style="width:135px" @change="disconnect"><el-option label="Service Name" value="service" /><el-option label="SID" value="sid" /></el-select></el-form-item>
+          <el-form-item :label="connection.oracleConnectionType === 'sid' ? 'SID' : '服务名'"><el-input v-model="connection.database" style="width:135px" placeholder="例如 FREEPDB1" @change="disconnect" /></el-form-item>
+          <el-form-item label="模式"><el-input v-model="connection.schema" style="width:135px" placeholder="账号默认模式" @change="disconnect" /></el-form-item>
+        </template>
         <el-form-item v-else label="数据库"><el-input v-model="connection.database" style="width:135px" placeholder="默认数据库" @change="disconnect" /></el-form-item>
         <el-form-item v-if="connection.databaseType === 'mysql'" label="SSL"><el-switch v-model="connection.useSsl" @change="disconnect" /></el-form-item>
         <template v-if="connection.databaseType === 'sqlserver'">

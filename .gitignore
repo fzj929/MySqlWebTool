@@ -6,6 +6,9 @@ client/node_modules/
 publish/
 .publish-tmp/
 DataPilot-data/
+**/certificates/
+*.pfx
+*.key
 tests/.artifacts/
 tests/**/bin/
 tests/**/obj/
