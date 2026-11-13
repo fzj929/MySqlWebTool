@@ -1,0 +1,88 @@
+name: Build and release
+
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+    paths: ['.github/workflows/release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            rid: linux-x64
+          - os: ubuntu-22.04-arm
+            rid: linux-arm64
+          - os: windows-2022
+            rid: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: npm ci --registry=https://registry.npmjs.org --replace-registry-host=always --no-audit --no-fund
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+      - run: dotnet run --project tests/DriverChecks/DriverChecks.csproj --configuration Release
+      - name: Publish self-contained application
+        run: dotnet publish server/DataPilot.Api.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=false -o publish/package
+      - name: Package
+        shell: pwsh
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force publish/package/wwwroot, artifacts | Out-Null
+          Copy-Item client/dist/* publish/package/wwwroot -Recurse -Force
+          Copy-Item README.md, LICENSE, RELEASE.md publish/package
+          if ($IsWindows) {
+            '@echo off', 'cd /d "%~dp0"', 'DataPilot.Api.exe --environment Production --https-port 8088', 'pause' | Set-Content publish/package/start.bat
+            Compress-Archive -Path publish/package/* -DestinationPath "artifacts/DataPilot-$env:RID.zip"
+          } else {
+            [IO.File]::WriteAllText("$PWD/publish/package/start.sh", "#!/usr/bin/env bash`nset -e`ncd -- `"`$(dirname -- `"`$0`")`"`nexec ./DataPilot.Api --environment Production --https-port 8088`n")
+            chmod +x publish/package/DataPilot.Api publish/package/start.sh
+            tar -czf "artifacts/DataPilot-$env:RID.tar.gz" -C publish/package .
+            if ($LASTEXITCODE -ne 0) { throw 'Archive failed' }
+          }
+          Get-ChildItem artifacts -File | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)" | Set-Content "$($_.FullName).sha256" -Encoding ascii
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DataPilot-${{ matrix.rid }}
+          path: artifacts/*
+          if-no-files-found: error
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v1.1.{0}', github.run_number) }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$COMMIT" --title "DataPilot $TAG" --generate-notes
+          gh release upload "$TAG" artifacts/* --clobber
